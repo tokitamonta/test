@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マークダウンをHTMLにするよ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            display: flex;
+            max-width: 1000px;
+            width: 100%;
+        }
+        .left, .right {
+            flex: 1;
+            padding: 20px;
+            margin: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .right {
+            max-width: 300px;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .output {
+            margin-top: 20px;
+        }
+        .output pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .rules-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .rules-list li {
+            margin: 10px 0;
+            font-size: 14px;
+            background-color: #eef;
+            padding: 8px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 左側のコンテンツ（変換結果表示） -->
+    <div class="left">
+        <h2>マークダウンをHTMLにするよ</h2>
+        
+        <!-- 入力欄：マークダウン形式の文字列 -->
+        <textarea id="markdownInput" rows="6" placeholder="文字を入力"></textarea>
+        
+        <!-- ボタン群 -->
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button onclick="convertMarkdown()">HTMLに変換</button>
+            <button onclick="removeMarkdownTags()">マークダウンのタグ削除</button>
+        </div>
+        
+        <!-- 結果表示欄：HTMLに変換された結果を表示（生テキスト形式で） -->
+        <div id="output" class="output">
+            <pre id="outputText"></pre>
+        </div>
+    </div>
+    
+    <!-- 右側のコンテンツ（タグの変換ルール表示とユーザーの文字変換） -->
+    <div class="right">
+        <h3>タグの変換ルール表示</h3>
+        <ul class="rules-list" id="rulesList">
+            <!-- タグ変換ルールをここに動的に追加します -->
+        </ul>
+        
+        <!-- 任意の文字列変換フォーム -->
+        <h3>任意の文字列変換フォーム</h3>
+        <input id="変換したい文字" type="text" placeholder="Find text">
+        <input id="置換したい文字" type="text" placeholder="Replace with">
+        <button onclick="replaceCustomText()">変換</button>
+        
+        <!-- 特定の文字列置換フォーム -->
+        <h3>特定の文字列置換するよ</h3>
+        <button onclick="replaceSpecificCharacters()">Replace < to [ , > to ] , - to ・</button>
+    </div>
+</div>
+
+<script>
+    function convertMarkdown() {
+        // 入力されたマークダウン形式のテキストを取得
+        let markdownText = document.getElementById('markdownInput').value;
+        
+        // 文頭が-だった行に改行を追加する処理
+        markdownText = addNewlineToDashLines(markdownText);
+        
+        // マークダウン形式の太字（**text**）をHTMLの太字（<b>text</b>）に置き換える
+        let htmlText = markdownText.replace(/\*\*(.*?)\*\*/gs, '<b>$1</b>');
+        
+        // HTMLに変換されたテキストを生のタグ付きテキストとして表示
+        document.getElementById('outputText').textContent = htmlText;
+        
+        // タグ変換のルールをリストに追加
+        displayTagConversionRules(markdownText, htmlText);
+    }
+
+    // 文頭が-の行に対して、文末に改行を追加する関数
+    function addNewlineToDashLines(text) {
+        // 行ごとに分割し、文頭が-の行に対して文末に改行を追加
+        let lines = text.split('\n').map(line => {
+            if (line.trim().startsWith('-')) {
+                return line + '\n';
+            }
+            return line;
+        });
+        return lines.join('\n');
+    }
+
+    function removeMarkdownTags() {
+        // 入力されたテキストを取得
+        let markdownText = document.getElementById('markdownInput').value;
+        
+        // 文頭が-だった行に改行を追加する処理
+        markdownText = addNewlineToDashLines(markdownText);
+        
+        // マークダウンタグをすべて削除する処理（**や*などを削除）
+        let plainText = markdownText
+            .replace(/\*\*(.*?)\*\*/gs, '$1')  // 太字の**を削除
+            .replace(/\*(.*?)\*/gs, '$1');    // 斜体の*を削除
+        
+        // マークダウンのタグを取り除いた結果を表示
+        document.getElementById('outputText').textContent = plainText;
+    }
+
+    function replaceSpecificCharacters() {
+        // HTML変換後のテキストを取得
+        let text = document.getElementById('outputText').textContent;
+
+        // <を[に、>を]に、-を・に置換する
+        let replacedText = text
+            .replace(/</g, '[')
+            .replace(/>/g, ']')
+            .replace(/-/g, '・');
+        
+        // 置換後のテキストを表示
+        document.getElementById('outputText').textContent = replacedText;
+    }
+
+    function displayTagConversionRules(markdownText, htmlText) {
+        // 変換されたタグルールを表示するためにリストをクリア
+        let rulesList = document.getElementById('rulesList');
+        rulesList.innerHTML = ''; // 既存のルールをクリア
+
+        // マークダウン形式とHTMLの対応を配列に格納
+        let rules = [
+            { markdown: '**', html: '<b></b>' }
+        ];
+
+        // 配列内のルールをリストとして表示
+        rules.forEach(rule => {
+            let listItem = document.createElement('li');
+            listItem.textContent = `${rule.markdown} → ${rule.html}`;
+            rulesList.appendChild(listItem);
+        });
+    }
+
+    function replaceCustomText() {
+        // ユーザーが入力した「検索対象の文字列」と「置き換える文字列」を取得
+        let findText = document.getElementById('findText').value;
+        let replaceText = document.getElementById('replaceText').value;
+        
+        // 入力されたテキストを取得し、指定の文字列を置き換える
+        let currentText = document.getElementById('outputText').textContent;
+        let newText = currentText.replace(new RegExp(findText, 'g'), replaceText);
+        
+        // 置き換えたテキストを表示
+        document.getElementById('outputText').textContent = newText;
+    }
+</script>
+
+</body>
+</html>

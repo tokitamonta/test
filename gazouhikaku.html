@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画像比較ツール</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    #container {
+      display: flex;
+      width: 80%;
+      height: 80vh;
+      border: 2px solid #ccc;
+      margin-top: 20px;
+      position: relative;
+      transition: width 0.3s ease, height 0.3s ease;
+    }
+
+    .image-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .image-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      position: absolute;
+    }
+
+    /* 重ね合わせモード用のクラス */
+    .stacked {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ドラッグ&ドロップ領域 */
+    .drop-area {
+      width: 100%;
+      height: 100%;
+      border: 2px dashed #aaa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      font-size: 24px;
+      position: absolute;
+      background-color: rgba(255, 255, 255, 0.8);
+      text-align: center;
+      cursor: pointer;
+      z-index: 10;
+    }
+
+    /* ボタンのスタイル */
+    .buttons {
+      margin-top: 20px;
+    }
+
+    .button {
+      margin: 5px;
+      padding: 10px 20px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    /* 画像切り替え用の非表示クラス */
+    .hide {
+      visibility: hidden;
+    }
+
+    .horizontal-split {
+      flex-direction: row;
+    }
+
+    .vertical-split {
+      flex-direction: column;
+    }
+
+    .overlay-mode {
+      position: relative;
+    }
+
+    /* 重ね合わせモードのボタン */
+    .overlay-buttons {
+      display: none;
+    }
+
+    .overlay-mode .overlay-buttons {
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>画像比較ツール</h1>
+
+  <!-- 画像を表示するコンテナ -->
+  <div id="container" class="vertical-split">
+    <div class="image-wrapper" id="image1-wrapper">
+      <div id="drop-area1" class="drop-area">画像1をドロップ</div>
+      <img id="image1" class="hide" src="" alt="Image 1">
+    </div>
+    <div class="image-wrapper" id="image2-wrapper">
+      <div id="drop-area2" class="drop-area">画像2をドロップ</div>
+      <img id="image2" class="hide" src="" alt="Image 2">
+    </div>
+  </div>
+
+  <!-- ボタンのエリア -->
+  <div class="buttons">
+    <button class="button" onclick="splitHorizontal()">左右分割</button>
+    <button class="button" onclick="splitVertical()">上下分割</button>
+    <button class="button" onclick="enableOverlayMode()">重ね合わせ</button>
+    <button class="button" onclick="toggleFullScreen()">フルスクリーン</button>
+  </div>
+
+  <!-- 重ね合わせモード用のボタン -->
+  <div class="overlay-buttons">
+    <button class="button" onclick="toggleImages()">画像表示切り替え</button>
+    <button class="button" onclick="exitOverlayMode()">通常表示に戻す</button>
+  </div>
+
+  <script>
+    let showingImage1 = true;
+
+    // 画像表示の切り替え（重ね合わせモード）
+    function toggleImages() {
+      const image1 = document.getElementById('image1');
+      const image2 = document.getElementById('image2');
+
+      if (showingImage1) {
+        image1.classList.add('hide');
+        image2.classList.remove('hide');
+      } else {
+        image1.classList.remove('hide');
+        image2.classList.add('hide');
+      }
+
+      showingImage1 = !showingImage1;
+    }
+
+    // スペースキーで画像を切り替え
+    document.addEventListener('keydown', function(event) {
+      if (event.code === 'Space') {
+        toggleImages(); // スペースキーが押されたら画像切り替えを実行
+        event.preventDefault(); // スペースキーによるスクロールを防止
+      }
+    });
+
+    // 左右分割表示
+    function splitHorizontal() {
+      const container = document.getElementById('container');
+      container.classList.remove('vertical-split', 'overlay-mode');
+      container.classList.add('horizontal-split');
+      showBothImages(); // 両方の画像を表示
+      hideOverlayButtons();
+    }
+
+    // 上下分割表示
+    function splitVertical() {
+      const container = document.getElementById('container');
+      container.classList.remove('horizontal-split', 'overlay-mode');
+      container.classList.add('vertical-split');
+      showBothImages(); // 両方の画像を表示
+      hideOverlayButtons();
+    }
+
+    // 重ね合わせモードを有効にする
+    function enableOverlayMode() {
+      const container = document.getElementById('container');
+      container.classList.remove('horizontal-split', 'vertical-split');
+      container.classList.add('overlay-mode');
+
+      const image1Wrapper = document.getElementById('image1-wrapper');
+      const image2Wrapper = document.getElementById('image2-wrapper');
+      image1Wrapper.classList.add('stacked');
+      image2Wrapper.classList.add('stacked');
+
+      showOverlayButtons();
+    }
+
+    // 通常の表示モードに戻す
+    function exitOverlayMode() {
+      const container = document.getElementById('container');
+      container.classList.remove('overlay-mode');
+
+      const image1Wrapper = document.getElementById('image1-wrapper');
+      const image2Wrapper = document.getElementById('image2-wrapper');
+      image1Wrapper.classList.remove('stacked');
+      image2Wrapper.classList.remove('stacked');
+
+      container.classList.add('horizontal-split'); // デフォルトでは左右分割に戻します
+      showBothImages(); // 両方の画像を表示
+      hideOverlayButtons();
+    }
+
+    // 両方の画像を表示する
+    function showBothImages() {
+      const image1 = document.getElementById('image1');
+      const image2 = document.getElementById('image2');
+      image1.classList.remove('hide');
+      image2.classList.remove('hide');
+      showingImage1 = true; // 画像1が最初に表示されていた状態に戻す
+    }
+
+    // フルスクリーンモードの切り替え
+    function toggleFullScreen() {
+      const container = document.getElementById('container');
+
+      if (!document.fullscreenElement) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.mozRequestFullScreen) { // Firefox
+          container.mozRequestFullScreen();
+        } else if (container.webkitRequestFullscreen) { // Chrome, Safari and Opera
+          container.webkitRequestFullscreen();
+        } else if (container.msRequestFullscreen) { // IE/Edge
+          container.msRequestFullscreen();
+        }
+
+        // コンテナを画面いっぱいに
+        container.style.width = '100%';
+        container.style.height = '100vh';
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+
+        // 元のサイズに戻す
+        container.style.width = '80%';
+        container.style.height = '80vh';
+      }
+    }
+
+    // 重ね合わせモード時のボタンを表示
+    function showOverlayButtons() {
+      const overlayButtons = document.querySelector('.overlay-buttons');
+      overlayButtons.style.display = 'inline-block';
+    }
+
+    // 重ね合わせモード時のボタンを非表示
+    function hideOverlayButtons() {
+      const overlayButtons = document.querySelector('.overlay-buttons');
+      overlayButtons.style.display = 'none';
+    }
+
+    // 画像を読み込んで表示する関数
+    function loadImage(file, imgElement, dropArea) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        imgElement.src = e.target.result;
+        imgElement.classList.remove('hide');
+        dropArea.classList.add('hidden'); // ドロップエリアを非表示
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ドロップイベントの設定
+    function setUpDropArea(dropAreaId, imgElementId) {
+      const dropArea = document.getElementById(dropAreaId);
+      const imgElement = document.getElementById(imgElementId);
+
+      dropArea.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        dropArea.style.borderColor = '#007bff';
+      });
+
+      dropArea.addEventListener('dragleave', () => {
+        dropArea.style.borderColor = '#aaa';
+      });
+
+      dropArea.addEventListener('drop', (event) => {
+        event.preventDefault();
+        dropArea.style.borderColor = '#aaa';
+        const file = event.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          loadImage(file, imgElement, dropArea);
+        } else {
+          alert('画像ファイルをドロップしてください');
+        }
+      });
+    }
+
+    // ドロップエリアの初期設定
+    setUpDropArea('drop-area1', 'image1');
+    setUpDropArea('drop-area2', 'image2');
+  </script>
+
+</body>
+</html>

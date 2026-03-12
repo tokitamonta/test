@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>画像つなげるだけ</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 20px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .card { border: 1px solid rgba(127,127,127,.35); border-radius: 12px; padding: 12px; }
+    #drop {
+      border: 2px dashed rgba(127,127,127,.55);
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      flex: 1 1 320px;
+    }
+    #drop.drag { background: rgba(127,127,127,.15); }
+    .small { opacity: .8; font-size: 12px; }
+    .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
+    .item {
+      border: 1px solid rgba(127,127,127,.35);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(127,127,127,.08);
+      display: grid;
+      grid-template-rows: auto auto;
+    }
+    .thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: rgba(0,0,0,.05); }
+    .meta { padding: 8px; display: grid; gap: 6px; }
+    .meta .name { font-size: 12px; word-break: break-all; }
+    .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    button {
+      border: 1px solid rgba(127,127,127,.45);
+      background: rgba(127,127,127,.15);
+      color: inherit;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    button.primary { background: rgba(60, 140, 255, .25); border-color: rgba(60, 140, 255, .55); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    canvas { max-width: 100%; border-radius: 12px; border: 1px solid rgba(127,127,127,.35); }
+    .warn { color: #d97706; font-size: 12px; }
+    .danger { color: #ef4444; font-size: 12px; }
+    label { display: inline-flex; gap: 6px; align-items: center; }
+    select, input[type="number"] {
+      padding: 6px 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(127,127,127,.45);
+      background: transparent;
+      color: inherit;
+    }
+    input[type="number"] { width: 110px; }
+    input[type="color"] { width: 46px; height: 32px; border-radius: 10px; border: 1px solid rgba(127,127,127,.45); background: transparent; padding: 0; }
+    .footer { margin-top: 12px; display: grid; gap: 10px; }
+    .hint { font-size: 12px; opacity: .8; }
+    .grid { display: grid; gap: 10px; }
+  </style>
+</head>
+<body>
+  <h1>画像つなげるだけ（ブラウザ内で完結）</h1>
+
+  <div class="card">
+    <div class="row">
+      <input id="file" type="file" accept="image/*" multiple hidden>
+      <div id="drop" role="button" tabindex="0" aria-label="画像を追加">
+        ここに画像をドラッグ&ドロップ<br><span class="small">またはクリックして選択</span>
+      </div>
+
+      <div class="grid" style="flex: 2 1 520px; min-width: 320px;">
+        <div class="card" style="padding:10px">
+          <div class="row">
+            <label><input type="radio" name="dir" value="vertical" checked> 縦につなぐ</label>
+            <label><input type="radio" name="dir" value="horizontal"> 横につなぐ</label>
+          </div>
+
+          <div class="row" style="margin-top:8px">
+            <label>間隔(px) <input id="gap" type="number" min="0" value="0"></label>
+            <label>背景 <input id="bg" type="color" value="#ffffff"></label>
+          </div>
+
+          <div class="row" style="margin-top:8px">
+            <label><input id="fitBaseEnable" type="checkbox" checked> サイズを揃える</label>
+            <label>基準
+              <select id="fitBaseMode">
+                <option value="max" selected>最大</option>
+                <option value="min">最小</option>
+                <option value="first">最初の画像</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="row" style="margin-top:8px">
+            <label><input id="postResizeEnable" type="checkbox"> 出力を長辺でリサイズ</label>
+            <label>長辺(px) <input id="postResizeLongEdge" type="number" min="1" value="2048"></label>
+            <span class="hint">（生成後にまとめて縮小/拡大）</span>
+          </div>
+
+          <div class="hint" style="margin-top:8px">※並び順はサムネをドラッグで入れ替え</div>
+        </div>
+
+        <div class="card" style="padding:10px">
+          <div class="row">
+            <button id="build" class="primary" disabled>生成</button>
+            <button id="download" disabled>ダウンロード(PNG)</button>
+            <button id="clear" disabled>全消し</button>
+          </div>
+          <div id="msg" class="small" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="list" class="list"></div>
+  </div>
+
+  <div class="footer">
+    <div class="card">
+      <div class="small">生成結果</div>
+      <div class="hint">大きい画像を大量に繋ぐとメモリ的に重くなることがあります</div>
+      <div style="margin-top:10px">
+        <canvas id="out"></canvas>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const fileInput = document.getElementById('file');
+  const drop = document.getElementById('drop');
+  const listEl = document.getElementById('list');
+  const buildBtn = document.getElementById('build');
+  const dlBtn = document.getElementById('download');
+  const clearBtn = document.getElementById('clear');
+  const msgEl = document.getElementById('msg');
+  const canvas = document.getElementById('out');
+  const ctx = canvas.getContext('2d');
+
+  const gapEl = document.getElementById('gap');
+  const bgEl = document.getElementById('bg');
+
+  const fitBaseEnableEl = document.getElementById('fitBaseEnable');
+  const fitBaseModeEl = document.getElementById('fitBaseMode');
+
+  const postResizeEnableEl = document.getElementById('postResizeEnable');
+  const postResizeLongEdgeEl = document.getElementById('postResizeLongEdge');
+
+  /** @type {{id:string, file:File, url:string, img:HTMLImageElement, name:string, w:number, h:number}[]} */
+  let items = [];
+  let lastBlobUrl = null;
+
+  const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+
+  function setMsg(text, kind="") {
+    msgEl.className = "small " + (kind || "");
+    msgEl.textContent = text || "";
+  }
+
+  function updateButtons() {
+    const has = items.length > 0;
+    buildBtn.disabled = !has;
+    clearBtn.disabled = !has;
+  }
+
+  function cleanupOutputUrl() {
+    if (lastBlobUrl) {
+      URL.revokeObjectURL(lastBlobUrl);
+      lastBlobUrl = null;
+    }
+  }
+
+  function clearAll() {
+    items.forEach(x => URL.revokeObjectURL(x.url));
+    items = [];
+    listEl.innerHTML = "";
+    canvas.width = 0; canvas.height = 0;
+    dlBtn.disabled = true;
+    cleanupOutputUrl();
+    setMsg("");
+    updateButtons();
+  }
+
+  async function fileToImage(file) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.decoding = "async";
+    img.loading = "eager";
+    const p = new Promise((res, rej) => {
+      img.onload = () => res(img);
+      img.onerror = (e) => rej(e);
+    });
+    img.src = url;
+    await p;
+    return { url, img, w: img.naturalWidth, h: img.naturalHeight };
+  }
+
+  function renderList() {
+    listEl.innerHTML = "";
+    items.forEach((it, idx) => {
+      const card = document.createElement('div');
+      card.className = "item";
+      card.draggable = true;
+      card.dataset.id = it.id;
+
+      const thumb = document.createElement('img');
+      thumb.className = "thumb";
+      thumb.src = it.url;
+      thumb.alt = it.name;
+
+      const meta = document.createElement('div');
+      meta.className = "meta";
+
+      const name = document.createElement('div');
+      name.className = "name";
+      name.textContent = `${idx+1}. ${it.name} (${it.w}×${it.h})`;
+
+      const btns = document.createElement('div');
+      btns.className = "btns";
+
+      const up = document.createElement('button');
+      up.textContent = "↑";
+      up.title = "上へ";
+      up.onclick = () => move(idx, idx-1);
+
+      const down = document.createElement('button');
+      down.textContent = "↓";
+      down.title = "下へ";
+      down.onclick = () => move(idx, idx+1);
+
+      const rm = document.createElement('button');
+      rm.textContent = "削除";
+      rm.onclick = () => remove(idx);
+
+      btns.append(up, down, rm);
+      meta.append(name, btns);
+
+      card.append(thumb, meta);
+      listEl.append(card);
+
+      // drag & drop reorder
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', it.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      });
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const fromId = e.dataTransfer.getData('text/plain');
+        const toId = it.id;
+        if (!fromId || fromId === toId) return;
+        const fromIndex = items.findIndex(x => x.id === fromId);
+        const toIndex = items.findIndex(x => x.id === toId);
+        if (fromIndex < 0 || toIndex < 0) return;
+        const [moved] = items.splice(fromIndex, 1);
+        items.splice(toIndex, 0, moved);
+        renderList();
+        setMsg("並び替えました。必要なら「生成」を押して更新してね。");
+      });
+    });
+
+    updateButtons();
+  }
+
+  function move(from, to) {
+    if (to < 0 || to >= items.length) return;
+    const [x] = items.splice(from, 1);
+    items.splice(to, 0, x);
+    renderList();
+  }
+
+  function remove(i) {
+    const [x] = items.splice(i, 1);
+    if (x) URL.revokeObjectURL(x.url);
+    renderList();
+    dlBtn.disabled = true;
+    cleanupOutputUrl();
+    setMsg(items.length ? "削除しました。必要なら「生成」を押して更新してね。" : "");
+  }
+
+  async function addFiles(fileList) {
+    const files = [...fileList].filter(f => f.type.startsWith("image/"));
+    if (!files.length) {
+      setMsg("画像ファイルが見つからなかったよ。", "warn");
+      return;
+    }
+    setMsg("読み込み中…");
+
+    for (const f of files) {
+      try {
+        const { url, img, w, h } = await fileToImage(f);
+        items.push({ id: uid(), file: f, url, img, name: f.name, w, h });
+      } catch (e) {
+        console.error(e);
+        setMsg("読み込みに失敗した画像があるっぽい。別形式で試してみて。", "warn");
+      }
+    }
+    renderList();
+    setMsg(`追加しました（合計 ${items.length} 枚）。並び替えてから「生成」どうぞ。`);
+  }
+
+  function getDir() {
+    return document.querySelector('input[name="dir"]:checked').value;
+  }
+
+  function pickBaseSize() {
+    const mode = fitBaseModeEl.value; // max|min|first
+    if (mode === "first") {
+      const f = items[0];
+      return { w: f.w, h: f.h };
+    }
+    if (mode === "min") {
+      const minW = Math.min(...items.map(x => x.w));
+      const minH = Math.min(...items.map(x => x.h));
+      return { w: minW, h: minH };
+    }
+    // max
+    const maxW = Math.max(...items.map(x => x.w));
+    const maxH = Math.max(...items.map(x => x.h));
+    return { w: maxW, h: maxH };
+  }
+
+  function resizeCanvasToLongEdge(srcCanvas, longEdgePx) {
+    const w = srcCanvas.width;
+    const h = srcCanvas.height;
+    if (!w || !h) return srcCanvas;
+    const longEdge = Math.max(w, h);
+    if (!longEdgePx || longEdgePx <= 0) return srcCanvas;
+
+    const scale = longEdgePx / longEdge;
+    const nw = Math.max(1, Math.round(w * scale));
+    const nh = Math.max(1, Math.round(h * scale));
+
+    const out = document.createElement('canvas');
+    out.width = nw;
+    out.height = nh;
+    const octx = out.getContext('2d');
+
+    // 高品質寄り
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = "high";
+    octx.drawImage(srcCanvas, 0, 0, nw, nh);
+    return out;
+  }
+
+  async function build() {
+    if (!items.length) return;
+    setMsg("生成中…");
+
+    const gap = Math.max(0, parseInt(gapEl.value || "0", 10));
+    const bg = bgEl.value || "#ffffff";
+    const dir = getDir();
+
+    const fitEnable = !!fitBaseEnableEl.checked;
+    const { w: baseW, h: baseH } = pickBaseSize();
+
+    // 各画像の描画サイズ（縦横比維持）
+    const drawSizes = items.map(x => {
+      if (!fitEnable) {
+        // 揃えない：原寸
+        return { w: x.w, h: x.h };
+      }
+      if (dir === "vertical") {
+        // 縦連結：幅を baseW に合わせる
+        const r = baseW / x.w;
+        return { w: baseW, h: Math.max(1, Math.round(x.h * r)) };
+      } else {
+        // 横連結：高さを baseH に合わせる
+        const r = baseH / x.h;
+        return { w: Math.max(1, Math.round(x.w * r)), h: baseH };
+      }
+    });
+
+    // キャンバスサイズ計算
+    let outW = 0, outH = 0;
+    if (dir === "vertical") {
+      outW = Math.max(...drawSizes.map(s => s.w));
+      outH = drawSizes.reduce((sum, s) => sum + s.h, 0) + gap * (items.length - 1);
+    } else {
+      outH = Math.max(...drawSizes.map(s => s.h));
+      outW = drawSizes.reduce((sum, s) => sum + s.w, 0) + gap * (items.length - 1);
+    }
+
+    // まずはメインcanvasに描く
+    canvas.width = outW;
+    canvas.height = outH;
+
+    ctx.save();
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, outW, outH);
+
+    let x = 0, y = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const s = drawSizes[i];
+
+      let dx = x, dy = y;
+
+      // 余りがある場合は中央寄せ
+      if (dir === "vertical") {
+        dx = Math.round((outW - s.w) / 2);
+      } else {
+        dy = Math.round((outH - s.h) / 2);
+      }
+
+      ctx.drawImage(it.img, dx, dy, s.w, s.h);
+
+      if (dir === "vertical") y += s.h + gap;
+      else x += s.w + gap;
+    }
+    ctx.restore();
+
+    // 出力後リサイズ（長辺）
+    const postResizeEnable = !!postResizeEnableEl.checked;
+    const longEdgePx = parseInt(postResizeLongEdgeEl.value || "0", 10);
+
+    let exportCanvas = canvas;
+    if (postResizeEnable && longEdgePx > 0) {
+      exportCanvas = resizeCanvasToLongEdge(canvas, longEdgePx);
+    }
+
+    // ダウンロード用URL更新
+    cleanupOutputUrl();
+    const blob = await new Promise(res => exportCanvas.toBlob(res, "image/png"));
+    lastBlobUrl = URL.createObjectURL(blob);
+    dlBtn.disabled = false;
+
+    const msgSize = postResizeEnable ? `${exportCanvas.width}×${exportCanvas.height}（長辺${longEdgePx}px）` : `${outW}×${outH}`;
+    setMsg(`生成OK（${msgSize}）。「ダウンロード」で保存できるよ。`);
+  }
+
+  function download() {
+    if (!lastBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = lastBlobUrl;
+    a.download = `joined_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  // events
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => {
+    if (e.key === "Enter" || e.key === " ") fileInput.click();
+  });
+  fileInput.addEventListener('change', async (e) => {
+    await addFiles(e.target.files);
+    fileInput.value = "";
+  });
+
+  drop.addEventListener('dragenter', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    drop.classList.remove('drag');
+    await addFiles(e.dataTransfer.files);
+  });
+
+  buildBtn.addEventListener('click', build);
+  dlBtn.addEventListener('click', download);
+  clearBtn.addEventListener('click', clearAll);
+
+  // サイズ揃えOFF時は基準UIを薄くする（見た目だけ）
+  function syncFitUi() {
+    const on = !!fitBaseEnableEl.checked;
+    fitBaseModeEl.disabled = !on;
+  }
+  fitBaseEnableEl.addEventListener('change', syncFitUi);
+  syncFitUi();
+
+  setMsg("画像を追加して、縦/横を選んで「生成」。");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>簡易画像リサイズツール</title>
+  <!-- JSZipをローカルから読み込む -->
+  <script src="./jszip.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #dropArea {
+      border: 2px dashed #ccc;
+      padding: 30px;
+      text-align: center;
+      margin-top: 20px;
+    }
+    #preview {
+      display: flex;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      gap: 20px;
+    }
+    .previewItem {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+      max-width: 300px;
+    }
+    .previewItem img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    #downloadAllBtn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 8px 16px;
+      border: 1px solid #333;
+      text-decoration: none;
+      background-color: #eaeaea;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>簡易画像リサイズツール</h1>
+
+  <!-- 長辺のサイズ入力 -->
+  <div>
+    <label for="longSide">長辺のサイズ (px): </label>
+    <input type="number" id="longSide" value="800" style="width: 80px;" />
+  </div>
+
+  <!-- ドラッグ＆ドロップ エリア -->
+  <div id="dropArea">
+    <p>ここに画像ファイルをドラッグ＆ドロップ</p>
+    <p>または</p>
+    <input type="file" id="fileInput" multiple accept="image/*" />
+  </div>
+
+  <!-- まとめてダウンロードボタン -->
+  <button id="downloadAllBtn">まとめてダウンロード（ZIP）</button>
+
+  <!-- リサイズ後の画像を表示する領域 -->
+  <div id="preview"></div>
+
+  <script>
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const longSideInput = document.getElementById('longSide');
+    const previewArea = document.getElementById('preview');
+    const downloadAllBtn = document.getElementById('downloadAllBtn');
+
+    // リサイズ後の画像情報を保持する配列
+    // { name: 'resized_...', dataURL: '...' } の形で格納
+    let resizedImages = [];
+
+    // ================================
+    // 1. ドラッグ＆ドロップ関連のイベント処理
+    // ================================
+    dropArea.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = 'blue';
+    });
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    dropArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+    });
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+      const files = e.dataTransfer.files;
+      handleFiles(files);
+    });
+
+    // ================================
+    // 2. ファイル選択ボタンのイベント処理
+    // ================================
+    fileInput.addEventListener('change', (e) => {
+      const files = e.target.files;
+      handleFiles(files);
+    });
+
+    // ================================
+    // 3. 受け取ったファイルをリサイズしてプレビュー＆ダウンロードリンクを作成
+    // ================================
+    function handleFiles(files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+          continue;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            const resizedDataURL = resizeImage(img);
+            displayResult(resizedDataURL, file.name);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    // ================================
+    // 4. リサイズ関数(縦横比を保持しながら長辺を指定サイズに)
+    // ================================
+    function resizeImage(img) {
+      const longSide = parseInt(longSideInput.value, 10);
+      const originalWidth = img.width;
+      const originalHeight = img.height;
+
+      let newWidth, newHeight;
+      if (originalWidth >= originalHeight) {
+        newWidth = longSide;
+        newHeight = (originalHeight / originalWidth) * newWidth;
+      } else {
+        newHeight = longSide;
+        newWidth = (originalWidth / originalHeight) * newHeight;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+      // PNGで出力 (JPEGにしたい場合は 'image/jpeg' + 画質指定も可能)
+      return canvas.toDataURL('image/png');
+    }
+
+    // ================================
+    // 5. 個別ダウンロードボタン＆配列への追加
+    // ================================
+    function displayResult(dataURL, originalName) {
+      const resizedName = 'resized_' + originalName;
+      resizedImages.push({
+        name: resizedName,
+        dataURL: dataURL
+      });
+
+      const container = document.createElement('div');
+      container.className = 'previewItem';
+
+      const imgElement = document.createElement('img');
+      imgElement.src = dataURL;
+      container.appendChild(imgElement);
+
+      // 個別ダウンロードボタン
+      const downloadBtn = document.createElement('a');
+      downloadBtn.href = dataURL;
+      downloadBtn.download = resizedName;
+      downloadBtn.textContent = '個別にダウンロード';
+      downloadBtn.style.display = 'inline-block';
+      downloadBtn.style.marginTop = '10px';
+      downloadBtn.style.padding = '6px 12px';
+      downloadBtn.style.border = '1px solid #333';
+      downloadBtn.style.textDecoration = 'none';
+      downloadBtn.style.backgroundColor = '#f0f0f0';
+      container.appendChild(downloadBtn);
+
+      previewArea.appendChild(container);
+    }
+
+    // ================================
+    // 6. まとめてダウンロードボタン
+    // ================================
+    downloadAllBtn.addEventListener('click', () => {
+      if (resizedImages.length === 0) {
+        alert('リサイズ済みの画像がありません。');
+        return;
+      }
+
+      const zip = new JSZip();
+
+      // ZIPにファイルを詰める
+      resizedImages.forEach((item) => {
+        const base64Data = item.dataURL.split(',')[1];
+        zip.file(item.name, base64Data, { base64: true });
+      });
+
+      // ZIPをBlobにしてダウンロード
+      zip.generateAsync({ type: 'blob' }).then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'resized_images.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    });
+  </script>
+
+</body>
+</html>
