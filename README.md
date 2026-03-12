@@ -1,1 +1,1 @@
-Commit New file
+適当にChatGPTに作ってもらったソフト置き場
