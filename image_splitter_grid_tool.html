@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>画像グリッド分割ツール</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1e2430;
+      --line: #65d6ff;
+      --line-selected: #ffb84d;
+      --text: #ecf2ff;
+      --muted: #9aa6bf;
+      --accent: #8af5c4;
+      --danger: #ff7a7a;
+      --border: #2b3447;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      padding: 18px;
+      background: linear-gradient(180deg, #171a21 0%, #12161d 100%);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.35rem;
+    }
+
+    .lead {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .section {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+
+    .row {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .row.two { grid-template-columns: 1fr 1fr; }
+    .row.three { grid-template-columns: 1fr 1fr 1fr; }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    input[type="checkbox"] { transform: translateY(1px); }
+
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 0.92rem;
+      margin-top: 2px;
+    }
+
+    .buttons {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.94rem;
+    }
+
+    button:hover { filter: brightness(1.08); }
+    button.primary { background: #1f5d45; border-color: #2e7e60; }
+    button.accent { background: #21455e; border-color: #2a688e; }
+    button.danger { background: #5b2828; border-color: #7a3636; }
+    button.full { grid-column: 1 / -1; }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      margin-top: 8px;
+    }
+
+    .statusbar {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 480px;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .stage {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100%;
+    }
+
+    canvas {
+      background: #0a0d12;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.28);
+      max-width: 100%;
+      height: auto;
+      cursor: crosshair;
+    }
+
+    .pill {
+      display: inline-block;
+      background: rgba(138,245,196,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(138,245,196,0.28);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .line-list {
+      display: grid;
+      gap: 6px;
+      max-height: 180px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .line-item {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      font-size: 0.88rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .line-item.selected {
+      border-color: var(--line-selected);
+      box-shadow: inset 0 0 0 1px var(--line-selected);
+    }
+
+    .kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #0f141d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 1000px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>画像グリッド分割ツール</h1>
+      <p class="lead">画像を1枚読み込み、縦線・横線を自由に追加してドラッグで調整し、その区画ごとに連番で書き出します。</p>
+
+      <div class="section">
+        <h2>1. 画像</h2>
+        <div class="row">
+          <div>
+            <label for="imageInput">画像を読み込む</label>
+            <input id="imageInput" type="file" accept="image/*" />
+          </div>
+        </div>
+        <div id="imageInfo" class="hint">まだ画像が読み込まれていません。</div>
+      </div>
+
+      <div class="section">
+        <h2>2. 分割線</h2>
+        <div class="buttons">
+          <button id="addVBtn" class="accent">縦線を追加</button>
+          <button id="addHBtn" class="accent">横線を追加</button>
+          <button id="deleteSelectedBtn" class="danger">選択線を削除</button>
+          <button id="clearLinesBtn">線をすべて削除</button>
+        </div>
+        <div class="row two" style="margin-top:10px;">
+          <div>
+            <label for="nudgeAmount">矢印キー移動量(px)</label>
+            <input id="nudgeAmount" type="number" min="1" step="1" value="5" />
+          </div>
+          <div>
+            <label for="lineThickness">表示線の太さ</label>
+            <input id="lineThickness" type="number" min="1" step="1" value="2" />
+          </div>
+        </div>
+        <label class="checkline"><input id="showNumbers" type="checkbox" checked /> 分割番号をプレビュー表示</label>
+        <label class="checkline"><input id="snapInteger" type="checkbox" checked /> 線位置を整数pxに丸める</label>
+        <div class="hint">
+          ・線はドラッグで移動できます<br>
+          ・近い線をクリックすると選択します<br>
+          ・選択中の線は <span class="kbd">Delete</span> で削除、<span class="kbd">↑↓←→</span> で微調整できます
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>3. 出力設定</h2>
+        <div class="row">
+          <div>
+            <label for="baseName">ファイル名の先頭</label>
+            <input id="baseName" type="text" value="split" />
+          </div>
+        </div>
+        <div class="row three">
+          <div>
+            <label for="startNumber">開始番号</label>
+            <input id="startNumber" type="number" step="1" value="1" />
+          </div>
+          <div>
+            <label for="digitCount">桁数</label>
+            <input id="digitCount" type="number" min="1" max="8" step="1" value="3" />
+          </div>
+          <div>
+            <label for="outputFormat">形式</label>
+            <select id="outputFormat">
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label for="orderMode">連番順</label>
+            <select id="orderMode">
+              <option value="row-major">行優先</option>
+              <option value="column-major">列優先</option>
+              <option value="spiral-cw">時計回りスパイラル</option>
+              <option value="spiral-ccw">反時計回りスパイラル</option>
+            </select>
+          </div>
+          <div>
+            <label for="startCorner">開始位置</label>
+            <select id="startCorner">
+              <option value="tl">左上</option>
+              <option value="tr">右上</option>
+              <option value="bl">左下</option>
+              <option value="br">右下</option>
+            </select>
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label for="jpegQuality">JPEG / WebP 品質(0〜1)</label>
+            <input id="jpegQuality" type="number" min="0" max="1" step="0.01" value="0.92" />
+          </div>
+          <div>
+            <label for="zipName">ZIPファイル名</label>
+            <input id="zipName" type="text" value="split_images" />
+          </div>
+        </div>
+        <button id="exportBtn" class="primary full">分割してZIP出力</button>
+        <div id="exportInfo" class="hint">画像を読み込むと、ここに分割数などが表示されます。</div>
+      </div>
+
+      <div class="section">
+        <h2>現在の分割線</h2>
+        <div id="lineSummary" style="margin-bottom:10px;"></div>
+        <div id="lineList" class="line-list"></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="statusbar" class="statusbar">画像を読み込んでください。</div>
+      <div class="canvas-wrap">
+        <div class="stage">
+          <canvas id="canvas"></canvas>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusbar = document.getElementById('statusbar');
+    const imageInfo = document.getElementById('imageInfo');
+    const exportInfo = document.getElementById('exportInfo');
+    const lineSummary = document.getElementById('lineSummary');
+    const lineList = document.getElementById('lineList');
+
+    const addVBtn = document.getElementById('addVBtn');
+    const addHBtn = document.getElementById('addHBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const clearLinesBtn = document.getElementById('clearLinesBtn');
+    const exportBtn = document.getElementById('exportBtn');
+
+    const baseNameInput = document.getElementById('baseName');
+    const startNumberInput = document.getElementById('startNumber');
+    const digitCountInput = document.getElementById('digitCount');
+    const outputFormatInput = document.getElementById('outputFormat');
+    const orderModeInput = document.getElementById('orderMode');
+    const startCornerInput = document.getElementById('startCorner');
+    const jpegQualityInput = document.getElementById('jpegQuality');
+    const zipNameInput = document.getElementById('zipName');
+    const showNumbersInput = document.getElementById('showNumbers');
+    const snapIntegerInput = document.getElementById('snapInteger');
+    const nudgeAmountInput = document.getElementById('nudgeAmount');
+    const lineThicknessInput = document.getElementById('lineThickness');
+
+    let sourceImage = null;
+    let imageBitmapWidth = 0;
+    let imageBitmapHeight = 0;
+    let displayScale = 1;
+    let verticalLines = [];
+    let horizontalLines = [];
+    let selectedLine = null; // { type: 'v'|'h', index }
+    let dragState = null;
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function roundMaybe(value) {
+      return snapIntegerInput.checked ? Math.round(value) : value;
+    }
+
+    function setStatus(text) {
+      statusbar.textContent = text;
+    }
+
+    function sortNumeric(arr) {
+      arr.sort((a, b) => a - b);
+    }
+
+    function getMaxCanvasSize() {
+      const wrap = document.querySelector('.canvas-wrap');
+      const w = Math.max(300, wrap.clientWidth - 40);
+      const h = Math.max(300, window.innerHeight - 80);
+      return { w, h };
+    }
+
+    function fitCanvasToImage() {
+      if (!sourceImage) {
+        canvas.width = 800;
+        canvas.height = 500;
+        return;
+      }
+      const maxSize = getMaxCanvasSize();
+      displayScale = Math.min(maxSize.w / imageBitmapWidth, maxSize.h / imageBitmapHeight, 1);
+      canvas.width = Math.max(1, Math.round(imageBitmapWidth * displayScale));
+      canvas.height = Math.max(1, Math.round(imageBitmapHeight * displayScale));
+    }
+
+    function toDisplayX(imageX) { return imageX * displayScale; }
+    function toDisplayY(imageY) { return imageY * displayScale; }
+    function toImageX(displayX) { return displayX / displayScale; }
+    function toImageY(displayY) { return displayY / displayScale; }
+
+    function getLineArrays(type) {
+      return type === 'v' ? verticalLines : horizontalLines;
+    }
+
+    function getMousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    }
+
+    function findNearestLine(displayX, displayY) {
+      const hitTolerance = Math.max(8, Number(lineThicknessInput.value) * 3);
+      let best = null;
+      let bestDist = Infinity;
+
+      verticalLines.forEach((x, index) => {
+        const dx = Math.abs(toDisplayX(x) - displayX);
+        if (dx < hitTolerance && dx < bestDist) {
+          best = { type: 'v', index };
+          bestDist = dx;
+        }
+      });
+
+      horizontalLines.forEach((y, index) => {
+        const dy = Math.abs(toDisplayY(y) - displayY);
+        if (dy < hitTolerance && dy < bestDist) {
+          best = { type: 'h', index };
+          bestDist = dy;
+        }
+      });
+
+      return best;
+    }
+
+    function getBoundaries(type, index) {
+      const arr = getLineArrays(type);
+      const full = type === 'v' ? imageBitmapWidth : imageBitmapHeight;
+      const prev = index === 0 ? 0 : arr[index - 1];
+      const next = index === arr.length - 1 ? full : arr[index + 1];
+      return { min: prev + 1, max: next - 1 };
+    }
+
+    function drawLine(displayPos, vertical, selected) {
+      ctx.save();
+      ctx.strokeStyle = selected ? getComputedStyle(document.documentElement).getPropertyValue('--line-selected') : getComputedStyle(document.documentElement).getPropertyValue('--line');
+      ctx.lineWidth = Number(lineThicknessInput.value) || 2;
+      ctx.beginPath();
+      if (vertical) {
+        ctx.moveTo(displayPos, 0);
+        ctx.lineTo(displayPos, canvas.height);
+      } else {
+        ctx.moveTo(0, displayPos);
+        ctx.lineTo(canvas.width, displayPos);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getCells() {
+      if (!sourceImage) return [];
+      const xs = [0, ...verticalLines, imageBitmapWidth];
+      const ys = [0, ...horizontalLines, imageBitmapHeight];
+      const cells = [];
+      for (let r = 0; r < ys.length - 1; r++) {
+        for (let c = 0; c < xs.length - 1; c++) {
+          const x = xs[c];
+          const y = ys[r];
+          const w = xs[c + 1] - xs[c];
+          const h = ys[r + 1] - ys[r];
+          cells.push({ row: r, col: c, x, y, w, h });
+        }
+      }
+      return {
+        cells,
+        rows: ys.length - 1,
+        cols: xs.length - 1,
+      };
+    }
+
+    function buildMatrix(rows, cols) {
+      const matrix = [];
+      for (let r = 0; r < rows; r++) {
+        const row = [];
+        for (let c = 0; c < cols; c++) row.push({ row: r, col: c });
+        matrix.push(row);
+      }
+      return matrix;
+    }
+
+    function transformCoord(coord, rows, cols, corner) {
+      const { row, col } = coord;
+      switch (corner) {
+        case 'tr': return { row, col: cols - 1 - col };
+        case 'bl': return { row: rows - 1 - row, col };
+        case 'br': return { row: rows - 1 - row, col: cols - 1 - col };
+        case 'tl':
+        default: return { row, col };
+      }
+    }
+
+    function inverseTransformCoord(coord, rows, cols, corner) {
+      // same mapping works both ways because each transform is its own inverse
+      return transformCoord(coord, rows, cols, corner);
+    }
+
+    function getOrderedCoords(rows, cols, mode, corner) {
+      const logical = [];
+      if (mode === 'row-major') {
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            logical.push({ row: r, col: c });
+          }
+        }
+      } else if (mode === 'column-major') {
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rows; r++) {
+            logical.push({ row: r, col: c });
+          }
+        }
+      } else {
+        const matrix = buildMatrix(rows, cols);
+        let top = 0;
+        let bottom = rows - 1;
+        let left = 0;
+        let right = cols - 1;
+        while (top <= bottom && left <= right) {
+          if (mode === 'spiral-cw') {
+            for (let c = left; c <= right; c++) logical.push(matrix[top][c]);
+            top++;
+            for (let r = top; r <= bottom; r++) logical.push(matrix[r][right]);
+            right--;
+            if (top <= bottom) {
+              for (let c = right; c >= left; c--) logical.push(matrix[bottom][c]);
+              bottom--;
+            }
+            if (left <= right) {
+              for (let r = bottom; r >= top; r--) logical.push(matrix[r][left]);
+              left++;
+            }
+          } else {
+            for (let r = top; r <= bottom; r++) logical.push(matrix[r][left]);
+            left++;
+            for (let c = left; c <= right; c++) logical.push(matrix[bottom][c]);
+            bottom--;
+            if (left <= right) {
+              for (let r = bottom; r >= top; r--) logical.push(matrix[r][right]);
+              right--;
+            }
+            if (top <= bottom) {
+              for (let c = right; c >= left; c--) logical.push(matrix[top][c]);
+              top++;
+            }
+          }
+        }
+      }
+
+      return logical.map((coord) => inverseTransformCoord(coord, rows, cols, corner));
+    }
+
+    function getOrderedCells() {
+      const { cells, rows, cols } = getCells();
+      const mode = orderModeInput.value;
+      const corner = startCornerInput.value;
+      const orderedCoords = getOrderedCoords(rows, cols, mode, corner);
+      return orderedCoords.map((coord, index) => {
+        const cell = cells.find(c => c.row === coord.row && c.col === coord.col);
+        return { ...cell, orderIndex: index };
+      });
+    }
+
+    function drawNumbersOverlay() {
+      if (!showNumbersInput.checked || !sourceImage) return;
+      const orderedCells = getOrderedCells();
+      const startNumber = Number(startNumberInput.value) || 1;
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const fontSize = Math.max(12, Math.min(28, canvas.width * 0.03));
+      ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+
+      orderedCells.forEach((cell) => {
+        const cx = toDisplayX(cell.x + cell.w / 2);
+        const cy = toDisplayY(cell.y + cell.h / 2);
+        const num = String(startNumber + cell.orderIndex);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        const metrics = ctx.measureText(num);
+        const padX = 12;
+        const padY = 8;
+        const boxW = metrics.width + padX * 2;
+        const boxH = fontSize + padY * 2;
+        const x = cx - boxW / 2;
+        const y = cy - boxH / 2;
+
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(x, y, boxW, boxH, 10);
+          ctx.fill();
+        } else {
+          ctx.fillRect(x, y, boxW, boxH);
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(num, cx, cy + 1);
+      });
+      ctx.restore();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!sourceImage) {
+        ctx.save();
+        ctx.fillStyle = '#12161d';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#8e99b3';
+        ctx.font = '600 20px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('画像を読み込むとここに表示されます', canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+        updatePanels();
+        return;
+      }
+
+      ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+      verticalLines.forEach((x, index) => {
+        drawLine(toDisplayX(x), true, selectedLine && selectedLine.type === 'v' && selectedLine.index === index);
+      });
+      horizontalLines.forEach((y, index) => {
+        drawLine(toDisplayY(y), false, selectedLine && selectedLine.type === 'h' && selectedLine.index === index);
+      });
+
+      drawNumbersOverlay();
+      updatePanels();
+    }
+
+    function updatePanels() {
+      if (!sourceImage) {
+        lineSummary.innerHTML = '';
+        lineList.innerHTML = '';
+        exportInfo.textContent = '画像を読み込むと、ここに分割数などが表示されます。';
+        return;
+      }
+
+      const { rows, cols } = getCells();
+      const total = rows * cols;
+      exportInfo.textContent = `${cols}列 × ${rows}行 = ${total}分割`;
+
+      lineSummary.innerHTML = `
+        <span class="pill">縦線 ${verticalLines.length}本</span>
+        <span class="pill">横線 ${horizontalLines.length}本</span>
+        <span class="pill">区画 ${total}個</span>
+      `;
+
+      const items = [];
+      verticalLines.forEach((x, index) => items.push({ type: 'v', index, value: x }));
+      horizontalLines.forEach((y, index) => items.push({ type: 'h', index, value: y }));
+
+      lineList.innerHTML = '';
+      if (!items.length) {
+        lineList.innerHTML = '<div class="hint">まだ分割線がありません。</div>';
+        return;
+      }
+
+      items.forEach((item) => {
+        const div = document.createElement('div');
+        const isSelected = selectedLine && selectedLine.type === item.type && selectedLine.index === item.index;
+        div.className = 'line-item' + (isSelected ? ' selected' : '');
+        div.innerHTML = `
+          <span>${item.type === 'v' ? '縦線' : '横線'} ${item.index + 1}</span>
+          <span>${Math.round(item.value * 100) / 100}px</span>
+        `;
+        div.addEventListener('click', () => {
+          selectedLine = { type: item.type, index: item.index };
+          render();
+        });
+        lineList.appendChild(div);
+      });
+    }
+
+    function addLine(type) {
+      if (!sourceImage) return;
+      const arr = getLineArrays(type);
+      const full = type === 'v' ? imageBitmapWidth : imageBitmapHeight;
+      let candidate = full / 2;
+      if (arr.length) {
+        const all = [0, ...arr, full];
+        let bestGap = -1;
+        for (let i = 0; i < all.length - 1; i++) {
+          const gap = all[i + 1] - all[i];
+          if (gap > bestGap) {
+            bestGap = gap;
+            candidate = (all[i] + all[i + 1]) / 2;
+          }
+        }
+      }
+      arr.push(roundMaybe(candidate));
+      sortNumeric(arr);
+      selectedLine = { type, index: arr.findIndex(v => v === roundMaybe(candidate)) };
+      render();
+      setStatus(type === 'v' ? '縦線を追加しました。' : '横線を追加しました。');
+    }
+
+    function deleteSelectedLine() {
+      if (!selectedLine) return;
+      const arr = getLineArrays(selectedLine.type);
+      arr.splice(selectedLine.index, 1);
+      selectedLine = null;
+      render();
+      setStatus('選択中の線を削除しました。');
+    }
+
+    function loadImageFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          sourceImage = img;
+          imageBitmapWidth = img.naturalWidth;
+          imageBitmapHeight = img.naturalHeight;
+          verticalLines = [];
+          horizontalLines = [];
+          selectedLine = null;
+          fitCanvasToImage();
+          render();
+          imageInfo.textContent = `読み込み済み: ${file.name} / ${imageBitmapWidth} × ${imageBitmapHeight}px`;
+          setStatus('画像を読み込みました。線を追加して分割してください。');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleCanvasMouseDown(evt) {
+      if (!sourceImage) return;
+      const pos = getMousePos(evt);
+      const nearest = findNearestLine(pos.x, pos.y);
+      if (nearest) {
+        selectedLine = nearest;
+        dragState = { ...nearest };
+        canvas.style.cursor = nearest.type === 'v' ? 'ew-resize' : 'ns-resize';
+        render();
+      } else {
+        selectedLine = null;
+        render();
+      }
+    }
+
+    function handleCanvasMouseMove(evt) {
+      if (!sourceImage) return;
+      const pos = getMousePos(evt);
+      const nearest = findNearestLine(pos.x, pos.y);
+
+      if (dragState) {
+        const arr = getLineArrays(dragState.type);
+        const { min, max } = getBoundaries(dragState.type, dragState.index);
+        let newPos = dragState.type === 'v' ? toImageX(pos.x) : toImageY(pos.y);
+        newPos = roundMaybe(clamp(newPos, min, max));
+        arr[dragState.index] = newPos;
+        sortNumeric(arr);
+        selectedLine = { type: dragState.type, index: arr.findIndex(v => v === newPos) };
+        dragState = { ...selectedLine };
+        render();
+        return;
+      }
+
+      if (nearest) {
+        canvas.style.cursor = nearest.type === 'v' ? 'ew-resize' : 'ns-resize';
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+    }
+
+    function handleCanvasMouseUp() {
+      dragState = null;
+      canvas.style.cursor = 'crosshair';
+    }
+
+    function padNumber(num, digits) {
+      return String(num).padStart(digits, '0');
+    }
+
+    async function canvasToBlob(offCanvas, mimeType, quality) {
+      return await new Promise((resolve) => offCanvas.toBlob(resolve, mimeType, quality));
+    }
+
+    async function exportCellsAsZip() {
+      if (!sourceImage) {
+        alert('先に画像を読み込んでください。');
+        return;
+      }
+      if (typeof JSZip === 'undefined') {
+        alert('ZIPライブラリの読み込みに失敗しました。ネット接続を確認して再読み込みしてください。');
+        return;
+      }
+
+      const orderedCells = getOrderedCells();
+      const baseName = (baseNameInput.value || 'split').trim();
+      const zipName = (zipNameInput.value || 'split_images').trim();
+      const startNumber = Number(startNumberInput.value) || 1;
+      const digits = Math.max(1, Number(digitCountInput.value) || 3);
+      const format = outputFormatInput.value;
+      const quality = clamp(Number(jpegQualityInput.value) || 0.92, 0, 1);
+      const mimeType = format === 'png' ? 'image/png' : format === 'webp' ? 'image/webp' : 'image/jpeg';
+      const extension = format === 'jpeg' ? 'jpg' : format;
+
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'ZIP作成中...';
+      setStatus(`書き出し中... ${orderedCells.length}個の画像を処理しています。`);
+
+      try {
+        const zip = new JSZip();
+
+        for (let i = 0; i < orderedCells.length; i++) {
+          const cell = orderedCells[i];
+          const offCanvas = document.createElement('canvas');
+          offCanvas.width = cell.w;
+          offCanvas.height = cell.h;
+          const offCtx = offCanvas.getContext('2d');
+          offCtx.drawImage(
+            sourceImage,
+            cell.x, cell.y, cell.w, cell.h,
+            0, 0, cell.w, cell.h
+          );
+
+          const blob = await canvasToBlob(offCanvas, mimeType, format === 'png' ? undefined : quality);
+          const filename = `${baseName}_${padNumber(startNumber + i, digits)}.${extension}`;
+          zip.file(filename, blob);
+          setStatus(`書き出し中... ${i + 1} / ${orderedCells.length}`);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${zipName}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        setStatus(`ZIP出力が完了しました。合計 ${orderedCells.length} 枚です。`);
+      } catch (err) {
+        console.error(err);
+        alert('ZIP出力中にエラーが発生しました。コンソールを確認してください。');
+        setStatus('ZIP出力に失敗しました。');
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = '分割してZIP出力';
+      }
+    }
+
+    function nudgeSelectedLine(delta) {
+      if (!selectedLine || !sourceImage) return;
+      const arr = getLineArrays(selectedLine.type);
+      const { min, max } = getBoundaries(selectedLine.type, selectedLine.index);
+      let value = arr[selectedLine.index] + delta;
+      value = roundMaybe(clamp(value, min, max));
+      arr[selectedLine.index] = value;
+      sortNumeric(arr);
+      selectedLine = { type: selectedLine.type, index: arr.findIndex(v => v === value) };
+      render();
+    }
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) loadImageFromFile(file);
+    });
+
+    addVBtn.addEventListener('click', () => addLine('v'));
+    addHBtn.addEventListener('click', () => addLine('h'));
+    deleteSelectedBtn.addEventListener('click', deleteSelectedLine);
+    clearLinesBtn.addEventListener('click', () => {
+      verticalLines = [];
+      horizontalLines = [];
+      selectedLine = null;
+      render();
+      setStatus('すべての線を削除しました。');
+    });
+    exportBtn.addEventListener('click', exportCellsAsZip);
+
+    [showNumbersInput, orderModeInput, startCornerInput, startNumberInput, digitCountInput, lineThicknessInput].forEach(el => {
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+
+    canvas.addEventListener('mousedown', handleCanvasMouseDown);
+    canvas.addEventListener('mousemove', handleCanvasMouseMove);
+    window.addEventListener('mouseup', handleCanvasMouseUp);
+    canvas.addEventListener('mouseleave', () => { if (!dragState) canvas.style.cursor = 'crosshair'; });
+
+    window.addEventListener('keydown', (evt) => {
+      if (!sourceImage) return;
+      const target = evt.target;
+      const tag = target.tagName?.toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+      if (typing) return;
+
+      const nudge = Math.max(1, Number(nudgeAmountInput.value) || 5);
+      if (evt.key === 'Delete' || evt.key === 'Backspace') {
+        evt.preventDefault();
+        deleteSelectedLine();
+      } else if (selectedLine) {
+        if (selectedLine.type === 'v') {
+          if (evt.key === 'ArrowLeft') { evt.preventDefault(); nudgeSelectedLine(-nudge); }
+          if (evt.key === 'ArrowRight') { evt.preventDefault(); nudgeSelectedLine(nudge); }
+        } else if (selectedLine.type === 'h') {
+          if (evt.key === 'ArrowUp') { evt.preventDefault(); nudgeSelectedLine(-nudge); }
+          if (evt.key === 'ArrowDown') { evt.preventDefault(); nudgeSelectedLine(nudge); }
+        }
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      fitCanvasToImage();
+      render();
+    });
+
+    fitCanvasToImage();
+    render();
+  </script>
+</body>
+</html>

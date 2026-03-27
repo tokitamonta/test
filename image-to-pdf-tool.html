@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>画像をPDFにまとめるツール</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --border: #374151;
+      --shadow: 0 10px 30px rgba(0,0,0,.25);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: clamp(1.5rem, 3vw, 2.3rem);
+      margin: 0 0 10px;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin: 0 0 24px;
+      line-height: 1.7;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+
+    .panel {
+      background: rgba(17,24,39,.9);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      background: rgba(255,255,255,.02);
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .dropzone {
+      border: 2px dashed #4b5563;
+      border-radius: 16px;
+      padding: 22px;
+      text-align: center;
+      background: rgba(255,255,255,.02);
+      transition: .2s ease;
+      cursor: pointer;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(96,165,250,.08);
+      transform: translateY(-1px);
+    }
+
+    .button-row, .tiny-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button, .fake-button {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: .15s ease;
+    }
+    button:hover, .fake-button:hover {
+      transform: translateY(-1px);
+      border-color: #6b7280;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      border-color: #3b82f6;
+    }
+    button.success {
+      background: linear-gradient(135deg, #16a34a, #22c55e);
+      border-color: #22c55e;
+    }
+    button.danger {
+      background: linear-gradient(135deg, #b91c1c, #ef4444);
+      border-color: #ef4444;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 12px;
+      font-size: 14px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-top: 6px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stat {
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .stat .v {
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+    .stat .k {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .list {
+      min-height: 240px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .empty {
+      padding: 28px;
+      border-radius: 16px;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255,255,255,.02);
+    }
+
+    .item {
+      display: grid;
+      grid-template-columns: 78px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+    }
+
+    .item.dragging {
+      opacity: .45;
+      transform: scale(.99);
+    }
+    .item.drop-target {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+    }
+
+    .thumb {
+      width: 78px;
+      height: 78px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb img {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+    }
+
+    .meta {
+      min-width: 0;
+    }
+    .meta .name {
+      font-weight: 700;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .meta .sub {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .drag-handle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      margin-top: 20px;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .progress {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,.08);
+      border: 1px solid var(--border);
+      margin-top: 14px;
+      display: none;
+    }
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #60a5fa, #22c55e);
+      transition: width .15s ease;
+    }
+
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 10px;
+      min-height: 20px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>画像をまとめてPDF化するツール</h1>
+    <p class="lead">複数画像を読み込み、順番を調整して、1つのPDFとして保存できます。<br>ドラッグ＆ドロップ、上下移動、並び反転、名前順ソートに対応しています。</p>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-head">設定</div>
+        <div class="panel-body">
+          <div class="field">
+            <label>画像を追加</label>
+            <div id="dropzone" class="dropzone" tabindex="0">
+              ここに画像をドラッグ＆ドロップ<br>
+              またはクリックして選択
+            </div>
+            <input id="fileInput" type="file" accept="image/*" multiple hidden>
+            <div class="hint">PNG / JPG / WEBP などの一般的な画像に対応しています。</div>
+          </div>
+
+          <div class="field">
+            <label for="pdfName">PDFファイル名</label>
+            <input id="pdfName" type="text" value="images" placeholder="images">
+          </div>
+
+          <div class="field">
+            <label for="pageSize">ページサイズ</label>
+            <select id="pageSize">
+              <option value="a4">A4</option>
+              <option value="letter">Letter</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="orientation">向き</label>
+            <select id="orientation">
+              <option value="auto">画像ごとに自動</option>
+              <option value="portrait">縦固定</option>
+              <option value="landscape">横固定</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="fitMode">画像の配置</label>
+            <select id="fitMode">
+              <option value="contain">全体が入るように配置</option>
+              <option value="cover">余白を減らして配置</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="margin">余白（mm）</label>
+            <input id="margin" type="number" min="0" max="30" step="1" value="8">
+          </div>
+
+          <div class="field">
+            <div class="button-row">
+              <button id="sortNameBtn">名前順</button>
+              <button id="reverseBtn">逆順</button>
+              <button id="clearBtn" class="danger">全部削除</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="button-row">
+              <button id="exportBtn" class="success">PDFを書き出す</button>
+            </div>
+            <div class="progress" id="progressWrap"><div class="bar" id="progressBar"></div></div>
+            <div class="status" id="status">画像を追加してください。</div>
+          </div>
+
+          <div class="footer-note">
+            使い方：<br>
+            1. 画像を追加<br>
+            2. 右側の一覧で順番を調整<br>
+            3. 必要ならページ設定を変更<br>
+            4. PDFを書き出す
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">画像一覧</div>
+        <div class="panel-body">
+          <div class="stats">
+            <div class="stat"><div class="k">画像数</div><div class="v" id="countStat">0</div></div>
+            <div class="stat"><div class="k">合計サイズ</div><div class="v" id="sizeStat">0 MB</div></div>
+            <div class="stat"><div class="k">並び</div><div class="v" id="orderStat">手動</div></div>
+          </div>
+
+          <div class="list" id="list"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const list = document.getElementById('list');
+    const countStat = document.getElementById('countStat');
+    const sizeStat = document.getElementById('sizeStat');
+    const orderStat = document.getElementById('orderStat');
+    const statusEl = document.getElementById('status');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+
+    const pdfNameEl = document.getElementById('pdfName');
+    const pageSizeEl = document.getElementById('pageSize');
+    const orientationEl = document.getElementById('orientation');
+    const fitModeEl = document.getElementById('fitMode');
+    const marginEl = document.getElementById('margin');
+
+    const sortNameBtn = document.getElementById('sortNameBtn');
+    const reverseBtn = document.getElementById('reverseBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const exportBtn = document.getElementById('exportBtn');
+
+    /** @type {{id:string,file:File,url:string,width:number,height:number,size:number,name:string}[]} */
+    let images = [];
+    let nameSortAsc = true;
+    let dragIndex = null;
+    let dropIndex = null;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function setProgress(percent, show = true) {
+      progressWrap.style.display = show ? 'block' : 'none';
+      progressBar.style.width = `${percent}%`;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 MB';
+      const mb = bytes / (1024 * 1024);
+      return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function updateStats(label = '手動') {
+      countStat.textContent = String(images.length);
+      sizeStat.textContent = formatBytes(images.reduce((sum, item) => sum + item.size, 0));
+      orderStat.textContent = label;
+    }
+
+    function renderList(orderLabel = '手動') {
+      updateStats(orderLabel);
+
+      if (images.length === 0) {
+        list.innerHTML = `<div class="empty">まだ画像がありません。<br>左のエリアから画像を追加してください。</div>`;
+        return;
+      }
+
+      list.innerHTML = images.map((item, index) => `
+        <div class="item" draggable="true" data-index="${index}">
+          <div class="thumb"><img src="${item.url}" alt="${escapeHtml(item.name)}"></div>
+          <div class="meta">
+            <div class="name">${index + 1}. ${escapeHtml(item.name)}</div>
+            <div class="sub">${item.width} × ${item.height}px / ${formatBytes(item.size)}<br><span class="drag-handle">ドラッグで並び替え</span></div>
+          </div>
+          <div class="actions">
+            <button data-action="up" data-index="${index}">↑</button>
+            <button data-action="down" data-index="${index}">↓</button>
+            <button data-action="remove" data-index="${index}" class="danger">削除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function loadImageInfo(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          resolve({
+            id: crypto.randomUUID(),
+            file,
+            url,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            size: file.size,
+            name: file.name,
+          });
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error(`${file.name} を読み込めませんでした。`));
+        };
+        img.src = url;
+      });
+    }
+
+    async function addFiles(fileList) {
+      const files = [...fileList].filter(file => file.type.startsWith('image/'));
+      if (files.length === 0) {
+        setStatus('画像ファイルが見つかりませんでした。');
+        return;
+      }
+
+      setStatus(`${files.length}枚の画像を読み込み中…`);
+      setProgress(0, true);
+
+      const loaded = [];
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const info = await loadImageInfo(files[i]);
+          loaded.push(info);
+          setProgress(Math.round(((i + 1) / files.length) * 100), true);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      images.push(...loaded);
+      renderList('追加順');
+      setStatus(`${loaded.length}枚追加しました。右側で順番を調整できます。`);
+      setTimeout(() => setProgress(0, false), 350);
+    }
+
+    function moveItem(index, direction) {
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= images.length) return;
+      [images[index], images[newIndex]] = [images[newIndex], images[index]];
+      renderList('手動');
+    }
+
+    function getPageBaseSize() {
+      const pageSize = pageSizeEl.value;
+      if (pageSize === 'letter') return { width: 215.9, height: 279.4 };
+      return { width: 210, height: 297 };
+    }
+
+    function getPageDimensions(image) {
+      const base = getPageBaseSize();
+      const orientationSetting = orientationEl.value;
+      let orientation = 'portrait';
+
+      if (orientationSetting === 'portrait') orientation = 'portrait';
+      else if (orientationSetting === 'landscape') orientation = 'landscape';
+      else orientation = image.width >= image.height ? 'landscape' : 'portrait';
+
+      const isLandscape = orientation === 'landscape';
+      return {
+        orientation,
+        width: isLandscape ? base.height : base.width,
+        height: isLandscape ? base.width : base.height,
+      };
+    }
+
+    function calcPlacement(imgW, imgH, pageW, pageH, margin, fitMode) {
+      const areaW = Math.max(1, pageW - margin * 2);
+      const areaH = Math.max(1, pageH - margin * 2);
+      const imgRatio = imgW / imgH;
+      const areaRatio = areaW / areaH;
+
+      let drawW, drawH;
+      if (fitMode === 'cover') {
+        if (imgRatio > areaRatio) {
+          drawH = areaH;
+          drawW = drawH * imgRatio;
+        } else {
+          drawW = areaW;
+          drawH = drawW / imgRatio;
+        }
+      } else {
+        if (imgRatio > areaRatio) {
+          drawW = areaW;
+          drawH = drawW / imgRatio;
+        } else {
+          drawH = areaH;
+          drawW = drawH * imgRatio;
+        }
+      }
+
+      return {
+        x: (pageW - drawW) / 2,
+        y: (pageH - drawH) / 2,
+        width: drawW,
+        height: drawH,
+      };
+    }
+
+    function fileToDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error(`${file.name} の読み込みに失敗しました。`));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function getImageFormatFromDataUrl(dataUrl) {
+      if (dataUrl.startsWith('data:image/png')) return 'PNG';
+      if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
+      return 'JPEG';
+    }
+
+    async function exportPdf() {
+      if (images.length === 0) {
+        setStatus('PDF化する画像がありません。');
+        return;
+      }
+      if (!window.jspdf?.jsPDF) {
+        setStatus('PDFライブラリの読み込みに失敗しました。ネット接続を確認してください。');
+        return;
+      }
+
+      const filename = (pdfNameEl.value || 'images').trim().replace(/\.pdf$/i, '') || 'images';
+      const margin = Math.max(0, Number(marginEl.value) || 0);
+      const fitMode = fitModeEl.value;
+
+      setStatus('PDFを作成中…');
+      setProgress(0, true);
+      exportBtn.disabled = true;
+
+      try {
+        const firstPage = getPageDimensions(images[0]);
+        const pdf = new jsPDF({
+          orientation: firstPage.orientation,
+          unit: 'mm',
+          format: [firstPage.width, firstPage.height],
+          compress: true,
+        });
+
+        for (let i = 0; i < images.length; i++) {
+          const item = images[i];
+          const page = getPageDimensions(item);
+          if (i > 0) {
+            pdf.addPage([page.width, page.height], page.orientation);
+          }
+
+          const dataUrl = await fileToDataURL(item.file);
+          const placement = calcPlacement(item.width, item.height, page.width, page.height, margin, fitMode);
+
+          const pageIndex = pdf.getNumberOfPages();
+          pdf.setPage(pageIndex);
+          const imageFormat = getImageFormatFromDataUrl(dataUrl);
+          pdf.addImage(dataUrl, imageFormat, placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
+
+          setProgress(Math.round(((i + 1) / images.length) * 100), true);
+          setStatus(`PDFを作成中… ${i + 1} / ${images.length}`);
+        }
+
+        pdf.save(`${filename}.pdf`);
+        setStatus(`PDFを書き出しました。ファイル名: ${filename}.pdf`);
+      } catch (error) {
+        console.error(error);
+        setStatus(`エラー: ${error.message || 'PDFの作成に失敗しました。'}`);
+      } finally {
+        exportBtn.disabled = false;
+        setTimeout(() => setProgress(0, false), 500);
+      }
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      if (e.target.files?.length) {
+        await addFiles(e.target.files);
+        fileInput.value = '';
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', async (e) => {
+      if (e.dataTransfer?.files?.length) {
+        await addFiles(e.dataTransfer.files);
+      }
+    });
+
+    list.addEventListener('click', (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const action = target.dataset.action;
+      const index = Number(target.dataset.index);
+      if (!action || Number.isNaN(index)) return;
+
+      if (action === 'up') moveItem(index, -1);
+      if (action === 'down') moveItem(index, 1);
+      if (action === 'remove') {
+        URL.revokeObjectURL(images[index].url);
+        images.splice(index, 1);
+        renderList('手動');
+        setStatus('画像を削除しました。');
+      }
+    });
+
+    list.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('.item');
+      if (!item) return;
+      dragIndex = Number(item.dataset.index);
+      item.classList.add('dragging');
+    });
+
+    list.addEventListener('dragend', (e) => {
+      const item = e.target.closest?.('.item');
+      if (item) item.classList.remove('dragging');
+      list.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+      dragIndex = null;
+      dropIndex = null;
+    });
+
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    list.addEventListener('dragenter', (e) => {
+      const target = e.target.closest('.item');
+      if (!target || dragIndex === null) return;
+      list.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+      target.classList.add('drop-target');
+      dropIndex = Number(target.dataset.index);
+    });
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('.item');
+      if (!target || dragIndex === null) return;
+      const targetIndex = Number(target.dataset.index);
+      if (Number.isNaN(targetIndex) || targetIndex === dragIndex) return;
+
+      const dragged = images[dragIndex];
+      images.splice(dragIndex, 1);
+      images.splice(targetIndex, 0, dragged);
+      renderList('手動');
+      setStatus('順番を入れ替えました。');
+    });
+
+    sortNameBtn.addEventListener('click', () => {
+      images.sort((a, b) => nameSortAsc
+        ? a.name.localeCompare(b.name, 'ja')
+        : b.name.localeCompare(a.name, 'ja'));
+      renderList(nameSortAsc ? '名前順↑' : '名前順↓');
+      setStatus('名前順で並び替えました。');
+      nameSortAsc = !nameSortAsc;
+    });
+
+    reverseBtn.addEventListener('click', () => {
+      images.reverse();
+      renderList('逆順');
+      setStatus('並びを反転しました。');
+    });
+
+    clearBtn.addEventListener('click', () => {
+      for (const item of images) URL.revokeObjectURL(item.url);
+      images = [];
+      renderList('手動');
+      setStatus('画像をすべて削除しました。');
+    });
+
+    exportBtn.addEventListener('click', exportPdf);
+
+    renderList();
+  </script>
+</body>
+</html>
