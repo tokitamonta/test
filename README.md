@@ -2,7 +2,7 @@
 
 TEXTCONV.html マークダウンで書かれた文章を通常文章やHTMLに直す
 
-ガゾウヒカク.html 画像を二個並べるか切り替え表示する
+gazouhikaku.html 画像を二個並べるか切り替え表示する
 
 gazousizehenkan.html 画像サイズを長辺でまとめて変更する
 
