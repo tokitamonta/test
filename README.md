@@ -1,4 +1,4 @@
-ChatGPTに作ってもらった普段使いソフト置き場 
+ChatGPTに作ってもらった普段使いソフト置き場 URLで飛んでも使えます
 
 TEXTCONV.html マークダウンで書かれた文章を通常文章やHTMLに直す
 https://tokitamonta.github.io/test/TEXTCONV.html
